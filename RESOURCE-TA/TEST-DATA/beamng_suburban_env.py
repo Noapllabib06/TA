@@ -213,7 +213,9 @@ class BeamNGSuburbanEnv(gym.Env):
         has_obstacle=True,
         target_cruise_kmh=80.0,
         render_mode=None,
-        use_yolo=True
+        use_yolo=True,
+        use_progressive_spawn=False,
+        progressive_spawn_checkpoints=None
     ):
         super(BeamNGSuburbanEnv, self).__init__()
 
@@ -226,6 +228,8 @@ class BeamNGSuburbanEnv(gym.Env):
         self.target_cruise_kmh = target_cruise_kmh
         self.render_mode = render_mode
         self.use_yolo = use_yolo
+        self.use_progressive_spawn = use_progressive_spawn
+        self.progressive_spawn_checkpoints = progressive_spawn_checkpoints or [48.0, 180.0, 350.0, 700.0, 1200.0]
 
         # 1. Konfigurasi Rute dan Peta
         if self.route_type == 'suburban':
@@ -246,8 +250,8 @@ class BeamNGSuburbanEnv(gym.Env):
 
         # Muat dataset waypoints dan potong offset awal
         csv_path = os.path.join(os.path.dirname(__file__), self.csv_name)
-        df_raw = pd.read_csv(csv_path)
-        self.df_wp = df_raw[df_raw['distance_m'] >= self.start_offset_m].reset_index(drop=True)
+        self.df_raw = pd.read_csv(csv_path)
+        self.df_wp = self.df_raw[self.df_raw['distance_m'] >= self.start_offset_m].reset_index(drop=True)
         self.waypoints = self.df_wp[['x', 'y', 'z']].values
 
         # Inisialisasi WaypointManager untuk kendali lateral otomatis (Speed-Adaptive Stanley + Center of Gravity Tracking)
@@ -428,10 +432,22 @@ class BeamNGSuburbanEnv(gym.Env):
         self.wm.last_closest_idx = 0
         self.wm.prev_steering = 0.0
         self.wm.prev_ego_yaw = None
-        self.prev_distance_m = float(self.df_wp['distance_m'].iloc[0])
-
         self.bng.scenario.restart()
         self.ego.set_shift_mode('arcade')
+
+        # PROGRESSIVE MULTI-SECTOR SPAWN (Kurikulum Latihan Multi-Sektor)
+        if getattr(self, 'use_progressive_spawn', False) and getattr(self, 'progressive_spawn_checkpoints', None):
+            selected_offset = float(np.random.choice(self.progressive_spawn_checkpoints))
+            self.start_offset_m = selected_offset
+            self.df_wp = self.df_raw[self.df_raw['distance_m'] >= selected_offset].reset_index(drop=True)
+            self.waypoints = self.df_wp[['x', 'y', 'z']].values
+            self.wm.set_waypoints(self.waypoints, target_cruise_kmh=self.target_cruise_kmh)
+            new_pos, new_rot = WaypointManager.calculate_start_pose(self.df_wp)
+            self.ego.teleport(pos=new_pos, rot_quat=new_rot, reset=True)
+            self.bng.control.step(5)
+            print(f"  [SPAWN SECTOR] Mobil di-spawn di Sektor Offset {selected_offset:.1f}m (Sisa rute: {len(self.df_wp)} WP)")
+
+        self.prev_distance_m = float(self.df_wp['distance_m'].iloc[0])
 
         if self.has_obstacle and self.obstacle is not None:
             if self.is_moving_obstacle:

@@ -268,6 +268,8 @@ def main():
                         help="Kapasitas rollout buffer PPO (default: 1024, menstabilkan GAE dan mencegah buffer poisoning)")
     parser.add_argument("--batch_size", type=int, default=64,
                         help="Ukuran batch update PPO (default: 64)")
+    parser.add_argument("--progressive_spawn", action="store_true",
+                        help="Aktifkan Progressive Multi-Sector Spawning (48m, 180m, 350m, 700m, 1200m) untuk kurikulum latihan")
     args, _ = parser.parse_known_args()
 
     run_name = f"PPO_{args.route.capitalize()}_Solo_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -276,13 +278,15 @@ def main():
     print("===========================================================")
 
     # 1. Inisialisasi Lingkungan Tanpa Kendaraan Rintangan (Solo Mode)
-    print(f"-> Membuka lingkungan rute '{args.route}' tanpa rintangan (Offset: {args.start_offset:.1f}m, Target: {args.speed:.0f} km/h)...")
+    prog_spawn_str = " [Progressive Multi-Sector Spawning: ON]" if args.progressive_spawn else ""
+    print(f"-> Membuka lingkungan rute '{args.route}' tanpa rintangan (Offset: {args.start_offset:.1f}m, Target: {args.speed:.0f} km/h){prog_spawn_str}...")
     env = BeamNGSuburbanEnv(
         route_type=args.route,
         start_offset_m=args.start_offset,
         has_obstacle=False,
         target_cruise_kmh=args.speed,
-        use_yolo=True
+        use_yolo=True,
+        use_progressive_spawn=args.progressive_spawn
     )
     env.max_steps = args.ep_steps
 
