@@ -376,7 +376,11 @@ class WaypointManager:
             else:
                 t = (k_abs - k_flat) / (k_sharp - k_flat)
                 w_rear_tgt = float(t * t * (3.0 - 2.0 * t))
-            dynamic_offset_tgt = -float(self.rear_axle_dist * w_rear_tgt)
+            # Di jalan lurus: acuan di As Roda Depan (+1.35m) memberikan phase lead alami, menghilangkan osilasi ping-pong
+            # Di tikungan tajam: acuan bergeser mulus ke Sumbu Roda Belakang (-1.30m) untuk mencegah roda melindas trotoar
+            front_ref = float(self.wheelbase / 2.0)  # +1.35m (Front Axle)
+            rear_ref = -float(self.rear_axle_dist)   # -1.30m (CoRA)
+            dynamic_offset_tgt = float((1.0 - w_rear_tgt) * front_ref + w_rear_tgt * rear_ref)
             # Corner Expansion Progresif: 0.28m pada kurva sedang s.d. 0.45m pada tikungan 90° tajam (mengimbangi off-tracking ban belakang)
             expansion_scale = 0.45 if k_abs >= 0.08 else (0.28 + (k_abs / 0.08) * 0.17)
             corner_offset_tgt = -float(np.sign(curv)) * w_rear_tgt * expansion_scale
@@ -393,13 +397,12 @@ class WaypointManager:
 
         # Asymmetric Corner Offset Decay (Axle Lag Exit Protection):
         # Masuk belokan: cepat (+0.20 per step) untuk segera melindungi ban belakang dari off-tracking
-        # Keluar belokan: meluruh perlahan (-0.035 per step ~ 13 step / ~3.8m) agar roda belakang sedan yang
-        # tertinggal di belakang CoM sepenuhnya bebas dari bibir beton sebelum sasis kembali ke sumbu tengah!
+        # Keluar belokan ke jalan lurus: meluruh cepat (0.10 per step) jika k_abs <= k_flat agar tidak tertahan miring di trek lurus!
         delta_cor = corner_offset_tgt - self.smooth_corner_offset
         if abs(corner_offset_tgt) > abs(self.smooth_corner_offset):
             self.smooth_corner_offset += float(np.clip(delta_cor, -max_rate_offset, max_rate_offset))
         else:
-            decay_rate = 0.035
+            decay_rate = 0.10 if k_abs <= k_flat else 0.035
             self.smooth_corner_offset += float(np.clip(delta_cor, -decay_rate, decay_rate))
 
         dynamic_offset = self.smooth_dynamic_offset
@@ -437,7 +440,7 @@ class WaypointManager:
         self.prev_ego_yaw = ego_yaw
         dt_est = 0.15 # Estimasi delta waktu antar step (15 physics steps ~ 0.15s)
         yaw_rate = delta_yaw / dt_est
-        kd_yaw = 0.18  # Ditingkatkan ke 0.18 untuk meredam osilasi lateral / zigzag
+        kd_yaw = 0.30  # Shockbreaker Kemudi: Redam osilasi rotasi sasis di kecepatan jelajah
         damping_term = kd_yaw * float(np.clip(yaw_rate, -2.5, 2.5))
 
         # 3. Estimasi Bounding Box 4 Sudut Kendaraan
@@ -457,8 +460,8 @@ class WaypointManager:
 
         e_lat_effective = e_lat + self.lateral_offset_m + corner_offset
         cross_track_term = np.arctan2(effective_ke * e_lat_effective, max(speed_ms, 0.1) + self.k_soft)
-        if abs(curv) < 0.005 and abs(e_lat_effective) < 0.035:
-            cross_track_term *= (abs(e_lat_effective) / 0.035)
+        if abs(curv) < 0.006 and abs(e_lat_effective) < 0.06:
+            cross_track_term *= (abs(e_lat_effective) / 0.06)
 
         # 5. Kompensasi umpan-maju kelengkungan (Curvature Feedforward)
         feedforward_term = np.arctan(self.wheelbase * curv)
@@ -472,14 +475,14 @@ class WaypointManager:
         raw_steering = -float(np.clip(steering_angle / MAX_STEER_RAD, -1.0, 1.0))
         
         # 8. Speed-Adaptive Actuator Filter (Anti-Limit-Cycle Weaving di Kecepatan Tinggi):
-        # Di kecepatan rendah / tikungan tajam (v <= 10 m/s): alpha = 0.65 (responsif belok tajam).
-        # Di kecepatan tinggi (v >= 20 m/s ~ 72-80 km/jam): alpha = 0.35 (redaman optimal, rock-solid, bebas goyang).
-        if speed_ms <= 10.0:
-            effective_alpha = 0.65
-        elif speed_ms >= 20.0:
-            effective_alpha = 0.35
+        # Di kecepatan rendah / tikungan tajam (v <= 8 m/s): alpha = 0.60 (responsif belok tajam).
+        # Di kecepatan tinggi (v >= 18 m/s ~ 65-80 km/jam): alpha = 0.28 (redaman optimal, rock-solid, bebas goyang).
+        if speed_ms <= 8.0:
+            effective_alpha = 0.60
+        elif speed_ms >= 18.0:
+            effective_alpha = 0.28
         else:
-            effective_alpha = 0.65 - 0.30 * ((speed_ms - 10.0) / 10.0)
+            effective_alpha = 0.60 - 0.32 * ((speed_ms - 8.0) / 10.0)
 
         cmd_steering = effective_alpha * raw_steering + (1.0 - effective_alpha) * self.prev_steering
         self.prev_steering = cmd_steering

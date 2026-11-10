@@ -88,18 +88,21 @@ class IntegratedSafetyShield:
             emergency_nudge = 0.15
 
         # PILAR 4B: CBE LANING KORIDOR (Clamping Tangensial, Bukan Membalik Arah Kemudi)
+        # Ambang batas margin dinamis: di tikungan 0.22m (waspada), di jalan lurus 0.12m (memberi ruang Stanley meluncur tenang)
+        effective_barrier_margin = self.d_barrier_margin if abs(curv) > 0.015 else 0.12
+
         # Sisi Kanan: Dekat trotoar kanan / batas luar jalan
-        if d_curb_phys_right < self.d_barrier_margin:
+        if d_curb_phys_right < effective_barrier_margin:
             # HANYA lakukan veto jika kendaraan sedang mengarah/membelok mendekati trotoar kanan!
             # Jika kendaraan sudah miring ke kiri (e_yaw < -0.10 rad) akibat tail-swing,
             # kemudi kanan justru WAJIB diizinkan agar hidung mobil dapat kembali sejajar lajur jalan.
             if approach_rate_right > 0.0:
-                violation_r = self.d_barrier_margin - d_curb_phys_right
+                violation_r = effective_barrier_margin - d_curb_phys_right
                 # Clamping tangensial: batasi sudut belok kanan (steer > 0) agar tidak memotong trotoar,
                 # tetapi JANGAN klem terlalu sempit yang memotong radius putar mobil di tikungan tajam!
                 if cbe_steer > 0.0:
                     max_steer_cap = 1.0 if (speed_kmh < 15.0 or abs(curv) > 0.02 or abs(e_yaw) > 0.12) else 0.70
-                    max_safe_steer_r = float(np.clip(max_steer_cap * (1.0 - violation_r / self.d_barrier_margin), 0.0, max_steer_cap))
+                    max_safe_steer_r = float(np.clip(max_steer_cap * (1.0 - violation_r / effective_barrier_margin), 0.0, max_steer_cap))
                     if cbe_steer > max_safe_steer_r:
                         cbe_steer = max_safe_steer_r
                         cbe_intervened = True
@@ -112,15 +115,15 @@ class IntegratedSafetyShield:
                 cbe_intervened = True
 
         # Sisi Kiri: Dekat batas lajur kiri / garis marka
-        elif d_curb_phys_left < self.d_barrier_margin:
+        elif d_curb_phys_left < effective_barrier_margin:
             # HANYA lakukan veto jika kendaraan sedang mengarah/membelok mendekati marka kiri!
             if approach_rate_left > 0.0:
-                violation_l = self.d_barrier_margin - d_curb_phys_left
+                violation_l = effective_barrier_margin - d_curb_phys_left
                 # Clamping tangensial: batasi sudut belok kiri (steer < 0) agar tidak melintasi marka tengah,
                 # tetapi JANGAN klem terlalu sempit yang memotong radius putar mobil!
                 if cbe_steer < 0.0:
                     min_steer_cap = 1.0 if (speed_kmh < 15.0 or abs(curv) > 0.02 or abs(e_yaw) > 0.12) else 0.70
-                    min_safe_steer_l = float(np.clip(-min_steer_cap * (1.0 - violation_l / self.d_barrier_margin), -min_steer_cap, 0.0))
+                    min_safe_steer_l = float(np.clip(-min_steer_cap * (1.0 - violation_l / effective_barrier_margin), -min_steer_cap, 0.0))
                     if cbe_steer < min_safe_steer_l:
                         cbe_steer = min_safe_steer_l
                         cbe_intervened = True
@@ -288,7 +291,7 @@ class BeamNGSuburbanEnv(gym.Env):
         self.a_max = 7.5         # Kapasitas deselerasi rem nominal (m/s^2)
         self.tau_react = 0.2     # Waktu latensi aktuasi (detik)
         self.d_margin = 3.5      # Buffer jarak aman berhenti total (meter)
-        self.lane_half_width = 1.7
+        self.lane_half_width = 1.85  # Disesuaikan ke 1.85m (lebar lajur suburban 3.7m) agar mobil memiliki ruang napas wajar
         self.shield_latched = False
 
         self.safety_shield = IntegratedSafetyShield(

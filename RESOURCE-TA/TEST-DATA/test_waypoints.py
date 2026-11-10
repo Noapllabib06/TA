@@ -65,21 +65,22 @@ def test_ackermann_offtracking_and_bounding_box():
     print("-> Test 3 Ackermann Off-Tracking: PASSED!\n")
 
 def test_dynamic_reference_point():
-    print("--- Test 4: Dynamic Curvature-Adaptive Reference Point (CoM <-> CoRA) ---")
+    print("--- Test 4: Dynamic Curvature-Adaptive Reference Point (Front Axle <-> CoRA) ---")
     start = (100.0, 50.0)
     
-    # 1. Lintasan Lurus (k = 0.0)
+    # 1. Lintasan Lurus (k = 0.0): Acuan bergeser ke As Roda Depan (+1.35m) untuk phase lead & anti-ping-pong
     straight_path = WaypointManager.generate_straight_path(start, length=50.0, step=1.0)
     wm_straight = WaypointManager(straight_path, use_dynamic_reference=True)
-    wm_straight.compute_steering((120.0, 50.0), ego_yaw=0.0, speed_ms=20.0)
-    print(f"Jalan Lurus    -> Offset: {wm_straight.last_ref_offset:+.3f}m | Bobot Belakang: {wm_straight.last_w_rear*100:3.0f}% (Harus 100% CoM = 0.000m)")
-    assert abs(wm_straight.last_ref_offset) < 0.001, "Jalan lurus harus menghasilkan offset 0.0m (murni CoM)"
+    for _ in range(8):
+        wm_straight.compute_steering((120.0, 50.0), ego_yaw=0.0, speed_ms=20.0)
+    print(f"Jalan Lurus    -> Offset: {wm_straight.last_ref_offset:+.3f}m | Bobot Belakang: {wm_straight.last_w_rear*100:3.0f}% (Harus As Depan ~ +1.350m)")
+    assert wm_straight.last_ref_offset >= 1.20, "Jalan lurus harus menghasilkan offset as depan (+1.35m)"
 
-    # 2. Lintasan Tajam S-Curve (Radius 25m -> Curvature ~0.04)
+    # 2. Lintasan Tajam S-Curve (Radius 25m -> Curvature ~0.04): Acuan bergeser ke Sumbu Roda Belakang (-1.30m)
     sharp_path = WaypointManager.generate_curved_path(start, length=100.0, step=1.0, curve_radius=40.0)
     wm_sharp = WaypointManager(sharp_path, use_dynamic_reference=True)
     # Evaluasi pada titik tikungan puncak (dist ~ 25) setelah transisi halus beberapa langkah
-    for _ in range(8):
+    for _ in range(15):
         wm_sharp.compute_steering(sharp_path[25], ego_yaw=wm_sharp.segment_headings[25], speed_ms=8.0)
     print(f"Tikungan Tajam -> Offset: {wm_sharp.last_ref_offset:+.3f}m | Bobot Belakang: {wm_sharp.last_w_rear*100:3.0f}% (Harus 100% CoRA = -1.300m)")
     assert wm_sharp.last_ref_offset <= -1.20, "Tikungan tajam harus menggeser acuan ke sumbu belakang (CoRA ~ -1.30m)"
