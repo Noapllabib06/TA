@@ -248,6 +248,8 @@ def main():
                         help="Reset hitungan timesteps dan iterasi ke 0 saat memuat model awal")
     parser.add_argument("--save_freq", type=int, default=1000,
                         help="Frekuensi penyimpanan checkpoint otomatis dalam timesteps (default: 1000)")
+    parser.add_argument("--start_ep", type=int, default=1,
+                        help="Nomor episode awal untuk tampilan log terminal (default: 1)")
     parser.add_argument("--lr", type=float, default=1e-4,
                         help="Learning rate optimizer PPO (default: 1e-4 = 0.0001, mencegah policy shock)")
     parser.add_argument("--n_steps", type=int, default=1024,
