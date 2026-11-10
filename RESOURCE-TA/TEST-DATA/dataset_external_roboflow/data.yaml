@@ -1,0 +1,13 @@
+names:
+- curb
+- road
+nc: 2
+roboflow:
+  license: CC BY 4.0
+  project: curb-road-detection-23
+  url: https://universe.roboflow.com/alpharomeo911/curb-road-detection-23/dataset/1
+  version: 1
+  workspace: alpharomeo911
+test: ../test/images
+train: ../train/images
+val: ../valid/images

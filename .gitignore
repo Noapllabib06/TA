@@ -1,0 +1,40 @@
+# Virtual Environments
+*venv*/
+*.venv*/
+.venv/
+venv_ta/
+env/
+venv/
+ENV/
+
+# Temporary / Pip cache
+pip-*/
+pip-build-tracker-*/
+pip-ephem-wheel-cache-*/
+pip-install-*/
+pip-uninstall-*/
+
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Large datasets & raw sensor dumps (44k+ images, ~1.5GB)
+# Catatan: Dataset gambar mentah disimpan terpisah (Google Drive / Roboflow)
+RESOURCE-TA/TEST-DATA/dataset_yolo/
+RESOURCE-TA/TEST-DATA/Dataset/
+RESOURCE-TA/TEST-DATA/dataset_raw/
+RESOURCE-TA/TEST-DATA/runs/
+RESOURCE-TA/REFERENCE/
+
+# Temporary logs & scratch files
+*.log
+scratch/

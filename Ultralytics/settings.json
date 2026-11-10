@@ -1,0 +1,19 @@
+{
+  "settings_version": "0.0.8",
+  "datasets_dir": "C:\\Users\\Noapllabib\\Documents\\TATUL\\datasets",
+  "weights_dir": "weights",
+  "runs_dir": "runs",
+  "uuid": "a7005faaad1efcac983295ed73cc3942b6d072e9af025600abd9408ae6ebaaf5",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "mlflow": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}
