@@ -95,9 +95,10 @@ class IntegratedSafetyShield:
             if approach_rate_right > 0.0:
                 violation_r = self.d_barrier_margin - d_curb_phys_right
                 # Clamping tangensial: batasi sudut belok kanan (steer > 0) agar tidak memotong trotoar,
-                # tetapi JANGAN dibalik ke arah kiri penuh yang membuang mobil melintang ke jalur lawan!
+                # tetapi JANGAN klem terlalu sempit yang memotong radius putar mobil di tikungan tajam!
                 if cbe_steer > 0.0:
-                    max_safe_steer_r = float(np.clip(0.45 * (1.0 - violation_r / self.d_barrier_margin), 0.0, 0.45))
+                    max_steer_cap = 1.0 if (speed_kmh < 15.0 or abs(curv) > 0.02 or abs(e_yaw) > 0.12) else 0.70
+                    max_safe_steer_r = float(np.clip(max_steer_cap * (1.0 - violation_r / self.d_barrier_margin), 0.0, max_steer_cap))
                     if cbe_steer > max_safe_steer_r:
                         cbe_steer = max_safe_steer_r
                         cbe_intervened = True
@@ -112,9 +113,10 @@ class IntegratedSafetyShield:
             if approach_rate_left > 0.0:
                 violation_l = self.d_barrier_margin - d_curb_phys_left
                 # Clamping tangensial: batasi sudut belok kiri (steer < 0) agar tidak melintasi marka tengah,
-                # tetapi JANGAN dibalik ke arah kanan penuh!
+                # tetapi JANGAN klem terlalu sempit yang memotong radius putar mobil!
                 if cbe_steer < 0.0:
-                    min_safe_steer_l = float(np.clip(-0.45 * (1.0 - violation_l / self.d_barrier_margin), -0.45, 0.0))
+                    min_steer_cap = 1.0 if (speed_kmh < 15.0 or abs(curv) > 0.02 or abs(e_yaw) > 0.12) else 0.70
+                    min_safe_steer_l = float(np.clip(-min_steer_cap * (1.0 - violation_l / self.d_barrier_margin), -min_steer_cap, 0.0))
                     if cbe_steer < min_safe_steer_l:
                         cbe_steer = min_safe_steer_l
                         cbe_intervened = True
@@ -136,14 +138,14 @@ class IntegratedSafetyShield:
         #    - Kecepatan manuver rendah (< 25 km/jam)
         # 2. Redam halus di kecepatan tinggi di jalan lurus (> 35 km/jam) untuk mencegah osilasi hunting / fish-tailing.
         is_flipping_direction = (cbe_steer * self.last_steer) < 0.0 and abs(cbe_steer - self.last_steer) > 0.25
-        is_critical_cornering = abs(e_yaw) > 0.18 or abs(curv) > 0.03 or abs(cbe_steer) > 0.35
+        is_critical_cornering = abs(e_yaw) > 0.15 or abs(curv) > 0.025 or abs(cbe_steer) > 0.35
 
         if (is_flipping_direction or is_critical_cornering) and speed_kmh < 25.0:
-            effective_max_steer_rate = 0.38  # Putaran setir cepat untuk melipat belokan tanpa lag fasa
+            effective_max_steer_rate = 0.42  # Putaran setir cepat untuk melipat belokan tanpa lag fasa
         elif speed_kmh > 35.0:
             effective_max_steer_rate = 0.14  # Redam halus di kecepatan tinggi jalan lurus
         else:
-            effective_max_steer_rate = 0.22  # Jelajah menengah stabil
+            effective_max_steer_rate = 0.25  # Jelajah menengah stabil
 
         delta_steer = cbe_steer - self.last_steer
         clipped_delta = float(np.clip(delta_steer, -effective_max_steer_rate, effective_max_steer_rate))
@@ -176,18 +178,16 @@ class IntegratedSafetyShield:
             final_brake = max(final_brake, curb_brake)
 
         # D. Mekanisme Escape Crawl CBE (Pencegah Deadlock VEHICLE_STUCK di Bibir Trotoar):
-        # Saat mobil bergerak sangat lambat (< 1.5 km/jam) dan menempel bibir trotoar (d_curb <= 0.08m):
+        # Saat mobil bergerak sangat lambat (< 1.5 km/jam) dan menempel bibir trotoar:
         # 1. Lepas rem 100% penuh (final_brake = 0.0) agar roda bebas berputar maju.
         # 2. Suntikkan torsi jelajah merayap minimum (unstick crawl throttle >= 0.25) untuk
         #    mengatasi hambatan gesek statis sasis dan membebaskan mobil dari trotoar.
-        # 3. KEMUDI: HANYA batasi setir ke [-0.45, 0.45] rad jika mobil di jalan lurus (|e_yaw| < 0.20 rad dan |curv| < 0.03).
-        #    JIKA sedang di tikungan tajam (|e_yaw| >= 0.20 atau |curv| >= 0.03), IZINKAN sudut penuh Stanley (hingga 1.0)
-        #    agar moncong mobil tidak meluncur lurus keluar aspal saat melipat belokan siku-siku!
+        # 3. KEMUDI: Bebaskan sudut setir penuh (hingga +/- 1.0) agar mobil mampu melipat
+        #    tikungan tajam dan melepaskan diri dari trotoar tanpa dipotong radius putarnya!
         if speed_kmh < 1.5 and (d_curb_phys_right <= 0.08 or d_curb_phys_left <= 0.08):
             final_brake = 0.0
             final_throttle = max(final_throttle, 0.25)
-            if abs(e_yaw) < 0.20 and abs(curv) < 0.03:
-                final_steering = float(np.clip(final_steering, -0.45, 0.45))
+            final_steering = float(np.clip(final_steering, -1.0, 1.0))
             self.last_steer = final_steering
 
         return final_steering, final_throttle, final_brake, cbe_intervened, cls_intervened
