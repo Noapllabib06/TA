@@ -1,5 +1,6 @@
 import os
 import glob
+import time
 import argparse
 import numpy as np
 from datetime import datetime
@@ -34,6 +35,8 @@ class SoloMetricsCallback(BaseCallback):
         super(SoloMetricsCallback, self).__init__(verbose)
         self.ep_count = start_ep - 1
         self.rollout_count = 0
+        self.ep_start_time = time.time()
+        self.rollout_start_time = time.time()
 
         # Episode-level buffers
         self.speeds_in_episode = []
@@ -134,7 +137,10 @@ class SoloMetricsCallback(BaseCallback):
             curb_str = f"{min_curb:.2f}m" if min_curb < 3.8 else "AMAN"
             shield_pct = ((self.cbe_interventions + self.cls_interventions) / max(1, self.ep_steps)) * 100.0
             shield_str = f"CBE:{self.cbe_interventions}|CLS:{self.cls_interventions} ({shield_pct:.0f}%)"
-            print(f"-> [EP {self.ep_count:03d} | Total Step {self.num_timesteps}] Steps: {self.ep_steps:3d} | Spd: {avg_speed:4.1f} km/h | e_lat: {avg_elat:+.2f}m (Max: {max_elat:.2f}m, RR: {max_rr_elat:.2f}m) | Min Curb: {curb_str} | Shield: {shield_str} | Progres: {progress_m:5.1f}m ({pct:4.1f}%) | {status_str}")
+            ep_dur = max(0.1, time.time() - self.ep_start_time)
+            t_now = datetime.now().strftime("%H:%M:%S")
+            print(f"[{t_now}] -> [EP {self.ep_count:03d} | Total Step {self.num_timesteps}] Steps: {self.ep_steps:3d} ({ep_dur:4.1f}s) | Spd: {avg_speed:4.1f} km/h | e_lat: {avg_elat:+.2f}m (Max: {max_elat:.2f}m, RR: {max_rr_elat:.2f}m) | Min Curb: {curb_str} | Shield: {shield_str} | Progres: {progress_m:5.1f}m ({pct:4.1f}%) | {status_str}")
+            self.ep_start_time = time.time()
 
             self.speeds_in_episode = []
             self.lateral_errors = []
@@ -201,16 +207,22 @@ class SoloMetricsCallback(BaseCallback):
         status_curb = "AMAN (>0.2m)" if min_curb >= 0.20 else ("WASPADA (0-0.2m)" if min_curb >= 0.0 else "MELINDAS TROTOAR (<0m)")
         status_lateral = "PRESISI (<0.45m)" if mean_elat < 0.45 else ("CUKUP (<0.7m)" if mean_elat < 0.70 else "LEMAH (>0.7m)")
 
-        print("\n" + "="*72)
-        print(f"       HASIL EVALUASI KELAYAKAN PELATIHAN (ROLLOUT #{self.rollout_count})")
-        print("="*72)
+        rollout_dur = max(0.1, time.time() - self.rollout_start_time)
+        mins = int(rollout_dur // 60)
+        secs = int(rollout_dur % 60)
+        t_now = datetime.now().strftime("%H:%M:%S")
+
+        print("\n" + "="*75)
+        print(f"       HASIL EVALUASI KELAYAKAN PELATIHAN (ROLLOUT #{self.rollout_count} @ {t_now} | Durasi: {mins}m {secs}s)")
+        print("="*75)
         print(f" * Rasio Intervensi Perisai : {shield_ratio_pct:5.1f}%  -> [{status_shield}]")
         print(f" * Rekor Jarak Tempuh       : {max_prog:5.1f} m (Rata-rata: {mean_prog:5.1f} m)")
         print(f" * Deviasi Lateral Jalur     : {mean_elat:5.2f} m (Max: {max_elat:.2f} m, RR: {max_rr_elat:.2f} m) -> [{status_lateral}]")
         print(f" * Jarak Bebas Trotoar Min   : {min_curb:5.2f} m  -> [{status_curb}]")
         print(f" * Kepatuhan Kecepatan       : Galat {spd_err:4.1f} km/h (Avg Spd: {avg_spd:4.1f} km/h)")
         print(f" * Total Insiden Rollout    : Tabrakan: {self.rollout_collision_count} | Off-track: {self.rollout_off_track_count} | Curb-climb: {self.rollout_curb_climb_count}")
-        print("="*72 + "\n")
+        print("="*75 + "\n")
+        self.rollout_start_time = time.time()
 
         # Reset penampung rollout
         self.rollout_speeds = []

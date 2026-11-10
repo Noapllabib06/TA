@@ -4,6 +4,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import pandas as pd
+from datetime import datetime
 
 from beamngpy import BeamNGpy, Scenario, Vehicle
 from beamngpy.sensors import Lidar, Electrics, Damage, Ultrasonic
@@ -785,7 +786,8 @@ class BeamNGSuburbanEnv(gym.Env):
         if abs(curv) > 0.03 or abs(cmd_steering) > 0.15 or d_corridor_phys < 0.50:
             cbe_str = " [CBE!]" if cbe_intervened else ""
             cls_str = " [CLS!]" if cls_intervened else ""
-            print(f"  [CORNER LOG] Stanley: {raw_steering:+.3f} | Final: {cmd_steering:+.3f}{cbe_str}{cls_str} | e_yaw: {e_yaw:+.2f} rad | d_phys_R: {d_curb_phys_right:.2f}m | Spd: {speed_ms*3.6:4.1f} km/h (V_tgt: {v_target*3.6:4.1f})")
+            t_str = datetime.now().strftime("%H:%M:%S")
+            print(f"  [{t_str}] [CORNER LOG] Stanley: {raw_steering:+.3f} | Final: {cmd_steering:+.3f}{cbe_str}{cls_str} | e_yaw: {e_yaw:+.2f} rad | d_phys_R: {d_curb_phys_right:.2f}m | Spd: {speed_ms*3.6:4.1f} km/h (V_tgt: {v_target*3.6:4.1f})")
 
         # JAMINAN ANTI-MUNDUR (Zero Reverse Lockout):
         # Simulator BeamNG dalam mode 'arcade' mengartikan input pedal rem (brake)
