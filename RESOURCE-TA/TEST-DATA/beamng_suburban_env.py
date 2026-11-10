@@ -77,6 +77,20 @@ class IntegratedSafetyShield:
         approach_rate_right = e_yaw + 0.40 * cbe_steer
         approach_rate_left  = -e_yaw - 0.40 * cbe_steer
 
+        # Skalakan batas sudut kemudi fisik dinamis berdasarkan kecepatan (Speed-Dependent Dynamic Steering Clamp):
+        # Pada kecepatan tinggi (v > 45 km/jam), sudut kemudi dibatasi ketat agar percepatan lateral ay <= 0.35 G.
+        # Menghilangkan total fenomena Pilot/Controller Induced Oscillation (PIO) dan hunting ping-pong di jalan lurus.
+        if speed_kmh > 70.0:
+            max_allowable_steer = 0.05
+        elif speed_kmh > 45.0:
+            ratio = (speed_kmh - 45.0) / (70.0 - 45.0)
+            max_allowable_steer = 0.08 - ratio * (0.08 - 0.05)
+        elif speed_kmh > 25.0:
+            ratio = (speed_kmh - 25.0) / (45.0 - 25.0)
+            max_allowable_steer = 0.35 - ratio * (0.35 - 0.08)
+        else:
+            max_allowable_steer = 1.0
+
         # Skalakan koreksi CBE berdasarkan kecepatan (Anti-Ping-Pong di Kecepatan Tinggi):
         # Di atas 25 km/jam, batasi intervensi maksimum (max 0.12) agar mobil tidak membanting liar melintasi marka tengah.
         # Di bawah 25 km/jam di tikungan, berikan otoritas penuh (0.32) untuk mencegah tabrakan trotoar.
@@ -101,7 +115,7 @@ class IntegratedSafetyShield:
                 # Clamping tangensial: batasi sudut belok kanan (steer > 0) agar tidak memotong trotoar,
                 # tetapi JANGAN klem terlalu sempit yang memotong radius putar mobil di tikungan tajam!
                 if cbe_steer > 0.0:
-                    max_steer_cap = 1.0 if (speed_kmh < 15.0 or abs(curv) > 0.02 or abs(e_yaw) > 0.12) else 0.70
+                    max_steer_cap = min(max_allowable_steer, 1.0 if (speed_kmh < 15.0 or abs(curv) > 0.02 or abs(e_yaw) > 0.12) else 0.70)
                     max_safe_steer_r = float(np.clip(max_steer_cap * (1.0 - violation_r / effective_barrier_margin), 0.0, max_steer_cap))
                     if cbe_steer > max_safe_steer_r:
                         cbe_steer = max_safe_steer_r
@@ -122,7 +136,7 @@ class IntegratedSafetyShield:
                 # Clamping tangensial: batasi sudut belok kiri (steer < 0) agar tidak melintasi marka tengah,
                 # tetapi JANGAN klem terlalu sempit yang memotong radius putar mobil!
                 if cbe_steer < 0.0:
-                    min_steer_cap = 1.0 if (speed_kmh < 15.0 or abs(curv) > 0.02 or abs(e_yaw) > 0.12) else 0.70
+                    min_steer_cap = min(max_allowable_steer, 1.0 if (speed_kmh < 15.0 or abs(curv) > 0.02 or abs(e_yaw) > 0.12) else 0.70)
                     min_safe_steer_l = float(np.clip(-min_steer_cap * (1.0 - violation_l / effective_barrier_margin), -min_steer_cap, 0.0))
                     if cbe_steer < min_safe_steer_l:
                         cbe_steer = min_safe_steer_l
@@ -158,6 +172,14 @@ class IntegratedSafetyShield:
         if abs(delta_steer) > effective_max_steer_rate:
             cls_intervened = True
         final_steering = float(np.clip(self.last_steer + clipped_delta, -1.0, 1.0))
+
+        # PILAR 3B: SPEED-DEPENDENT DYNAMIC STEERING CLAMP (Mencegah Lateral G-Force Berlebih & PIO di Jalan Cepat)
+        # Membatasi percepatan lateral fisis (a_y <= 0.35 G) pada kecepatan jelajah tinggi (> 45 km/jam).
+        # Menjamin aktuator kemudi tidak membanting sasis melampaui batas cengkeraman ban di jalan lurus.
+        if abs(final_steering) > max_allowable_steer:
+            final_steering = float(np.clip(final_steering, -max_allowable_steer, max_allowable_steer))
+            cls_intervened = True
+
         self.last_steer = final_steering
 
         # B. Cornering Speed Governor: Batasi overspeed saat setir terbelok tajam

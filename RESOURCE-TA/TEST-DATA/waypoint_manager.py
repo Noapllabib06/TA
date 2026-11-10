@@ -427,9 +427,19 @@ class WaypointManager:
             e_lat_cg = e_lat
         
         # 2a. Speed-Adaptive Heading Gain k_yaw(v)
-        # Menjamin redaman kritis optimal (v_ref = 8.0 m/s ~ 28.8 km/jam)
-        v_ref = 8.0
-        k_yaw = min(1.0, v_ref / max(speed_ms, v_ref))
+        # Menjamin redaman kritis optimal dan menghilangkan over-sensitivitas kemudi di jalan lurus:
+        # - Kecepatan rendah (<= 20 km/jam / 5.56 m/s): k_yaw = 1.0 (penuh, lincah belok tajam 90°)
+        # - Kecepatan menengah (20 - 40 km/jam): interpolasi linier 1.0 -> 0.50
+        # - Kecepatan tinggi (40 - 80 km/jam): interpolasi linier 0.50 -> 0.35 (tenang dan bebas goyang)
+        speed_kmh = speed_ms * 3.6
+        if speed_kmh <= 20.0:
+            k_yaw = 1.00
+        elif speed_kmh <= 40.0:
+            k_yaw = 1.00 - 0.50 * ((speed_kmh - 20.0) / 20.0)
+        elif speed_kmh <= 80.0:
+            k_yaw = 0.50 - 0.15 * ((speed_kmh - 40.0) / 40.0)
+        else:
+            k_yaw = 0.35
         heading_term = k_yaw * e_yaw
 
         # 2b. Yaw-Rate Damping Term (Peredam Kecepatan Rotasi Sudut Geleng)
@@ -470,9 +480,20 @@ class WaypointManager:
         # Suku redaman rotasi (- damping_term) secara aktif meredam yaw rate berlebih
         steering_angle = heading_term + cross_track_term + feedforward_term - damping_term
 
-        # 7. Normalisasi ke rentang aktuasi BeamNG [-1.0 s.d. 1.0]
+        # 7. Normalisasi ke rentang aktuasi BeamNG [-1.0 s.d. 1.0] dengan Speed-Dependent Dynamic Steering Clamp
         MAX_STEER_RAD = 0.61
-        raw_steering = -float(np.clip(steering_angle / MAX_STEER_RAD, -1.0, 1.0))
+        if speed_kmh > 70.0:
+            max_steer_limit = 0.05
+        elif speed_kmh > 45.0:
+            ratio = (speed_kmh - 45.0) / (70.0 - 45.0)
+            max_steer_limit = 0.08 - ratio * (0.08 - 0.05)
+        elif speed_kmh > 25.0:
+            ratio = (speed_kmh - 25.0) / (45.0 - 25.0)
+            max_steer_limit = 0.35 - ratio * (0.35 - 0.08)
+        else:
+            max_steer_limit = 1.0
+
+        raw_steering = -float(np.clip(steering_angle / MAX_STEER_RAD, -max_steer_limit, max_steer_limit))
         
         # 8. Speed-Adaptive Actuator Filter (Anti-Limit-Cycle Weaving di Kecepatan Tinggi):
         # Di kecepatan rendah / tikungan tajam (v <= 8 m/s): alpha = 0.60 (responsif belok tajam).
