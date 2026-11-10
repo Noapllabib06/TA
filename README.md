@@ -41,8 +41,6 @@ Sistem dirancang menggunakan pendekatan hierarkis (*Hierarchical Autonomous Cont
 │       ├── waypoints_suburban_town.csv # Dataset lintasan waypoint rute Suburban
 │       ├── models_saved/               # Checkpoint bobot PPO (.zip)
 │       └── tensorboard_logs/           # Log telemetri TensorBoard
-├── Artikel/                            # Draft naskah ilmiah dan dokumentasi
-├── MATERI/                             # Bahan pustaka dan referensi
 ├── yolov8n-seg.pt                      # Bobot model segmentasi YOLOv8-seg
 ├── yolov8n.pt                          # Bobot model deteksi objek YOLOv8
 └── README.md
@@ -85,3 +83,4 @@ Skrip pelatihan secara otomatis mencetak kartu evaluasi status setiap 1.024 lang
 * **`curb/min_effective_curb_dist_m`**: Jarak bebas terdekat roda ke batu trotoar (Target: $> 0.20\text{ m}$).
 * **`lateral/mean_e_lat_m`**: Deviasi lateral rata-rata (Target: $< 0.45\text{ m}$).
 * **`train/explained_variance`**: Stabilitas fungsi nilai *Critic* (Target: $> 0.30$).
+

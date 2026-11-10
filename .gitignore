@@ -38,3 +38,9 @@ RESOURCE-TA/REFERENCE/
 # Temporary logs & scratch files
 *.log
 scratch/
+
+# Dokumen Pribadi & Tugas Perkuliahan (Tidak diunggah ke GitHub)
+TUGAS1/
+Tugas4/
+Artikel/
+MATERI/
