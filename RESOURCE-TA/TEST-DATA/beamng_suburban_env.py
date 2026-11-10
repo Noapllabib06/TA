@@ -103,9 +103,12 @@ class IntegratedSafetyShield:
                     if cbe_steer > max_safe_steer_r:
                         cbe_steer = max_safe_steer_r
                         cbe_intervened = True
-            # Torsi dorong darurat hanya jika ban depan menempel sangat dekat (< 8 cm) dan masih mengarah ke dinding
-            if d_curb_phys_right < 0.08 and approach_rate_right > 0.10:
-                cbe_steer -= emergency_nudge * ((0.08 - d_curb_phys_right) / 0.08)
+            # Torsi dorong darurat dengan Deadband & Tapering Halus (Anti-Ping-Pong):
+            # Pada kecepatan > 15 km/jam, redam total dorongan sentak agar tidak overshoot ke marka kiri.
+            # Pada kecepatan rendah, dorong lembut HANYA jika jarak < 5 cm dan moncong mobil masih mengarah ke dinding.
+            if speed_kmh < 15.0 and d_curb_phys_right < 0.05 and approach_rate_right > 0.12:
+                nudge_r = float(np.clip(emergency_nudge * ((0.05 - d_curb_phys_right) / 0.05), 0.0, 0.08))
+                cbe_steer -= nudge_r
                 cbe_intervened = True
 
         # Sisi Kiri: Dekat batas lajur kiri / garis marka
@@ -121,9 +124,12 @@ class IntegratedSafetyShield:
                     if cbe_steer < min_safe_steer_l:
                         cbe_steer = min_safe_steer_l
                         cbe_intervened = True
-            # Torsi dorong darurat hanya jika ban depan menempel sangat dekat (< 8 cm) dan masih mengarah ke marka
-            if d_curb_phys_left < 0.08 and approach_rate_left > 0.10:
-                cbe_steer += emergency_nudge * ((0.08 - d_curb_phys_left) / 0.08)
+            # Torsi dorong darurat dengan Deadband & Tapering Halus (Anti-Ping-Pong):
+            # Pada kecepatan > 15 km/jam, redam total dorongan sentak agar tidak overshoot ke trotoar kanan.
+            # Pada kecepatan rendah, dorong lembut HANYA jika jarak < 5 cm dan moncong mobil masih mengarah ke marka.
+            if speed_kmh < 15.0 and d_curb_phys_left < 0.05 and approach_rate_left > 0.12:
+                nudge_l = float(np.clip(emergency_nudge * ((0.05 - d_curb_phys_left) / 0.05), 0.0, 0.08))
+                cbe_steer += nudge_l
                 cbe_intervened = True
 
         cbe_steer = float(np.clip(cbe_steer, -1.0, 1.0))
@@ -132,21 +138,17 @@ class IntegratedSafetyShield:
         # POLISI 2: STABILITY SHIELD (Control Lyapunov Stabilizer - CLS)
         # Prioritas Sekunder (Secondary Constraint: Dynamic Smoothness & Grip)
         # =================================================================
-        # PILAR 3: ADAPTIVE SLEW-RATE CLS (Anti-Phase Lag & Anti-Fishtailing)
-        # 1. Longgarkan batas perubahan setir saat situasi kritis:
-        #    - Pembalikan tanda setir (kiri <-> kanan)
-        #    - Tikungan tajam atau galat arah hadap besar (|e_yaw| > 0.18 rad, |curv| > 0.03)
-        #    - Kecepatan manuver rendah (< 25 km/jam)
-        # 2. Redam halus di kecepatan tinggi di jalan lurus (> 35 km/jam) untuk mencegah osilasi hunting / fish-tailing.
-        is_flipping_direction = (cbe_steer * self.last_steer) < 0.0 and abs(cbe_steer - self.last_steer) > 0.25
-        is_critical_cornering = abs(e_yaw) > 0.15 or abs(curv) > 0.025 or abs(cbe_steer) > 0.35
+        # PILAR 3: ADAPTIVE SLEW-RATE CLS (Anti-Phase Lag & Anti-Ping-Pong / Anti-Fishtailing)
+        # Slew rate cepat (0.40) HANYA diizinkan pada kecepatan rendah dan tikungan tajam yang nyata.
+        # Pada jalan lurus / kurva sedang, batasi pembalikan arah setir agar tidak timbul osilasi bola ping-pong!
+        is_true_sharp_corner = (abs(curv) > 0.025 or abs(e_yaw) > 0.20) and speed_kmh < 22.0
 
-        if (is_flipping_direction or is_critical_cornering) and speed_kmh < 25.0:
-            effective_max_steer_rate = 0.42  # Putaran setir cepat untuk melipat belokan tanpa lag fasa
+        if is_true_sharp_corner:
+            effective_max_steer_rate = 0.40  # Otoritas putaran setir cepat untuk tikungan 90 derajat
         elif speed_kmh > 35.0:
-            effective_max_steer_rate = 0.14  # Redam halus di kecepatan tinggi jalan lurus
+            effective_max_steer_rate = 0.12  # Redaman solid di jalan raya cepat bebas goyang
         else:
-            effective_max_steer_rate = 0.25  # Jelajah menengah stabil
+            effective_max_steer_rate = 0.20  # Kecepatan jelajah menengah stabil, redam osilasi bolak-balik
 
         delta_steer = cbe_steer - self.last_steer
         clipped_delta = float(np.clip(delta_steer, -effective_max_steer_rate, effective_max_steer_rate))
@@ -300,6 +302,7 @@ class BeamNGSuburbanEnv(gym.Env):
         self.step_count = 0
         self.max_steps = 250
         self.last_v_target = 6.5 / 3.6
+        self.last_steer_action = 0.0
 
         # 5. Inisialisasi Simulator & Kendaraan
         print(f"Membuka instance BeamNG.tech pada peta '{self.map_name}' ({self.route_type})...")
@@ -427,6 +430,7 @@ class BeamNGSuburbanEnv(gym.Env):
         self.prev_throttle = 0.0
         self.prev_brake = 0.0
         self.prev_steering = 0.0
+        self.last_steer_action = 0.0
         self.last_v_target = 6.5 / 3.6
         self.safety_shield.reset()
         self.wm.last_closest_idx = 0
@@ -858,7 +862,20 @@ class BeamNGSuburbanEnv(gym.Env):
         reward_progress = 1.0 * min(delta_progress_m, 2.5)  # Imbalan positif gerak maju sepanjang rute
         reward_heading = -0.4 * (e_yaw ** 2)                # Panduan kelurusan sudut hadap kontinu
 
-        reward = reward_speed + reward_shield_penalty + reward_lateral_penalty + reward_curb_warning + reward_progress + reward_heading
+        # 1. PENALTI PING-PONG / STEER RATE (Peredam Zigzag & Osilasi Lateral)
+        delta_steer = cmd_steering - getattr(self, 'last_steer_action', cmd_steering)
+        steer_rate_penalty = -0.25 * (delta_steer ** 2)
+        self.last_steer_action = cmd_steering
+
+        reward = (
+            reward_speed
+            + reward_shield_penalty
+            + reward_lateral_penalty
+            + reward_curb_warning
+            + reward_progress
+            + reward_heading
+            + steer_rate_penalty
+        )
 
         terminated = False
         truncated = False
@@ -999,6 +1016,7 @@ class BeamNGSuburbanEnv(gym.Env):
             "yolo_hud_frame": getattr(self, 'last_yolo_hud_frame', None),
             "roll_deg": roll_deg,
             "steering": cmd_steering,
+            "steer_rate_penalty": steer_rate_penalty,
             "v_target": v_target,
             "v_curve_safe": v_target,
             "curv": curv,

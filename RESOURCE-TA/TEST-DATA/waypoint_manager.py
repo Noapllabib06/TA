@@ -430,14 +430,14 @@ class WaypointManager:
         heading_term = k_yaw * e_yaw
 
         # 2b. Yaw-Rate Damping Term (Peredam Kecepatan Rotasi Sudut Geleng)
-        # Menghilangkan osilasi hunting / fish-tailing / ping-pong saat mobil melaju kencang
+        # Shockbreaker Kemudi: Menghilangkan osilasi hunting / fish-tailing / ping-pong
         if getattr(self, 'prev_ego_yaw', None) is None:
             self.prev_ego_yaw = ego_yaw
         delta_yaw = normalize_angle(ego_yaw - self.prev_ego_yaw)
         self.prev_ego_yaw = ego_yaw
         dt_est = 0.15 # Estimasi delta waktu antar step (15 physics steps ~ 0.15s)
         yaw_rate = delta_yaw / dt_est
-        kd_yaw = 0.15
+        kd_yaw = 0.18  # Ditingkatkan ke 0.18 untuk meredam osilasi lateral / zigzag
         damping_term = kd_yaw * float(np.clip(yaw_rate, -2.5, 2.5))
 
         # 3. Estimasi Bounding Box 4 Sudut Kendaraan
