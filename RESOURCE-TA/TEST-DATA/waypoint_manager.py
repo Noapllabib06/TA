@@ -19,12 +19,12 @@ class WaypointManager:
     dengan titik pusat acuan di Pusat Massa / Tengah Kendaraan (Center of Gravity / Mid-Wheelbase),
     serta Profil Kecepatan Kinematis Global (Kinematic Speed Profile) untuk jelajah otonom halus hingga 80+ km/jam.
     """
-    def __init__(self, waypoints=None, k_e=1.20, k_soft=0.8, wheelbase=2.7, front_axle_dist=0.0, lateral_offset_m=0.0, target_cruise_kmh=80.0, use_dynamic_reference=False, rear_axle_dist=1.30, front_overhang=0.85, rear_overhang=1.05):
+    def __init__(self, waypoints=None, k_e=0.75, k_soft=3.5, wheelbase=2.7, front_axle_dist=0.0, lateral_offset_m=0.0, target_cruise_kmh=80.0, use_dynamic_reference=False, rear_axle_dist=1.30, front_overhang=0.85, rear_overhang=1.05):
         """
         Args:
             waypoints: Array numpy berbentuk (N, 2) atau (N, 3) koordinat [x, y, (z)]
-            k_e: Gain cross-track error pada Stanley Controller (optimal: 1.20)
-            k_soft: Konstanta pelunakan kecepatan rendah (m/s, optimal: 0.8)
+            k_e: Gain cross-track error pada Stanley Controller (optimal: 0.75, anti-overshoot)
+            k_soft: Konstanta pelunakan kecepatan rendah (m/s, optimal: 3.5 untuk meredam osilasi ping-pong)
             wheelbase: Jarak sumbu roda kendaraan (etk800 ~ 2.7m)
             front_axle_dist: Jarak proyeksi titik acuan statis dari CG (jika use_dynamic_reference=False)
             lateral_offset_m: Buffer jarak lateral aman ke arah kiri lajur (m, e.g. 0.30m untuk menjauhi trotoar kanan)

@@ -237,8 +237,8 @@ class BeamNGSuburbanEnv(gym.Env):
         if self.route_type == 'suburban':
             self.map_name = 'east_coast_usa'
             self.csv_name = 'waypoints_suburban_town.csv'
-            self.k_e = 1.20
-            self.k_soft = 0.80
+            self.k_e = 0.75
+            self.k_soft = 3.50
         elif self.route_type == 'mountain_castle':
             self.map_name = 'italy'
             self.csv_name = 'waypoints_italy_castle.csv'
